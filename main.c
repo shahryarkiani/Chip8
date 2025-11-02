@@ -55,20 +55,29 @@ void gameLoop(HWND hwnd) {
     };
 
     int j = 0;
-    for (;;) {        
-        // Process Events
-        MSG msg = { 0 };
-        if (GetMessage(&msg, NULL, 0, 0) <= 0) break;
-        TranslateMessage(&msg);
-        DispatchMessage(&msg);
+
+    for (;;) {
+        MSG msg;
+        while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+            if (msg.message == WM_QUIT) {
+                free(chipState.MEM);
+                return;
+            }
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
 
         // Update Game State
         updateState(&chipState);
 
         // Update Screen
-        chip8Screen.pixels[(j * 17) % (CHIP8_SCREEN_HEIGHT * CHIP8_SCREEN_WIDTH * 4)] = j % 0xFF;
-        j++;
+        for (int i = 0; i < CHIP8_SCREEN_HEIGHT * CHIP8_SCREEN_WIDTH * 4; i++) {
+            chip8Screen.pixels[(j * 17) % (CHIP8_SCREEN_HEIGHT * CHIP8_SCREEN_WIDTH * 4)] = j % 0xFF;
+            j++;
+        }
+
         InvalidateRect(hwnd, NULL, FALSE);
+        Sleep(15);
     }
 
     free(chipState.MEM);
@@ -127,17 +136,15 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             PAINTSTRUCT ps;
             HDC hdc = BeginPaint(hwnd, &ps);
 
-            int x = ps.rcPaint.left;
-            int y = ps.rcPaint.top;
-            int width = ps.rcPaint.right - ps.rcPaint.left;
-            int height = ps.rcPaint.bottom - ps.rcPaint.top;
+            RECT clientRect;
+            GetClientRect(hwnd, &clientRect);
 
             StretchDIBits(
                 hdc, 
-                x, 
-                y, 
-                width, 
-                height, 
+                0, 
+                0, 
+                clientRect.right - clientRect.left, 
+                clientRect.bottom - clientRect.top, 
                 0, 
                 0, 
                 CHIP8_SCREEN_WIDTH, 
