@@ -1,28 +1,85 @@
 #include <windows.h>
-
 #define CHIP8_SCREEN_HEIGHT (32)
 #define CHIP8_SCREEN_WIDTH  (64)
 
+LRESULT CALLBACK windowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+
 typedef struct {
-    UINT8* MEM;     // Memory
-    UINT16 I;       // Address Register
-    UINT8 REG[16];  // General Purpose Registers
-    UINT16 PC;      // Program Counter
-    UINT16 DTIMER;  // Delay Timer
-    UINT16 STIMER;  // Sound Timer
+    UINT8*  MEM;        // Memory
+    UINT16  I;          // Address Register
+    UINT8   REG[16];    // General Purpose Registers
+    UINT16  PC;         // Program Counter
+    UINT16  DTIMER;     // Delay Timer
+    UINT16  STIMER;     // Sound Timer
+    UINT16  STACK[8];   // PC Stack
+    UINT8   SP;         // Stack Pointer
+
+
 } Chip8State;
 
+typedef struct {
+    int width;
+    int height;
+    UINT8* pixels;
+    BITMAPINFO bitmapInfo;
 
-LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+} Framebuffer;
 
-int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow)
-{
+Framebuffer chip8Screen = {
+    .width = 0,
+    .height = 0,
+    .pixels = NULL,
+    .bitmapInfo = {
+        .bmiHeader = {
+            .biSize = sizeof(BITMAPINFOHEADER),
+            .biWidth = CHIP8_SCREEN_WIDTH,
+            .biHeight = CHIP8_SCREEN_HEIGHT,
+            .biPlanes = 1,
+            .biBitCount = 32,
+            .biCompression = BI_RGB
+        }
+    }
+};
+
+void updateState(Chip8State* chipState) {
+}
+
+void gameLoop() {
+    Chip8State chipState = {
+        .MEM = malloc(4096),
+        .I = 0,
+        .REG = {0},
+        .PC = 0x200,
+        .DTIMER = 0,
+        .STIMER = 0,
+        .STACK = {0},
+        .SP = 0
+    };
+
+    for (;;) {        
+        // Process Events
+        MSG msg = { 0 };
+        if (GetMessage(&msg, NULL, 0, 0) <= 0) break;
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+
+        // Update Game State
+        updateState(&chipState);
+
+        // Update Screen
+        chip8Screen.pixels[1] = 0xFF;
+    }
+
+    free(chipState.MEM);
+}
+
+int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow) {
     // Register the window class.
     const wchar_t CLASS_NAME[] = L"CHIP8-EMULATOR";
 
     WNDCLASS wc = {0};
 
-    wc.lpfnWndProc = WindowProc;
+    wc.lpfnWndProc = windowProc;
     wc.hInstance = hInstance;
     wc.lpszClassName = CLASS_NAME;
 
@@ -45,31 +102,47 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 
     ShowWindow(hwnd, nCmdShow);
 
-    MSG msg = {0};
-    while (GetMessage(&msg, NULL, 0, 0) > 0)
-    {
-        TranslateMessage(&msg);
-        DispatchMessage(&msg);
-    }
+    HDC hdc = GetDC(hwnd);
+
+    HBITMAP hBitmap = CreateDIBSection(hdc, &chip8Screen.bitmapInfo, DIB_RGB_COLORS, &chip8Screen.pixels, NULL, 0);
+
+    gameLoop();
 
     return 0;
 }
 
-LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
-{
-    switch (uMsg)
-    {
-        case WM_DESTROY:
-        {
+LRESULT CALLBACK windowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    switch (uMsg) {   
+        case WM_DESTROY: {
             PostQuitMessage(0);
             return 0;
         }
-        case WM_PAINT:
-        {
+        case WM_PAINT: {
             PAINTSTRUCT ps;
             HDC hdc = BeginPaint(hwnd, &ps);
 
+            int x = ps.rcPaint.left;
+            int y = ps.rcPaint.top;
+            int width = ps.rcPaint.right - ps.rcPaint.left;
+            int height = ps.rcPaint.bottom - ps.rcPaint.top;
+
             FillRect(hdc, &ps.rcPaint, (HBRUSH)(COLOR_WINDOW + 1));
+
+            StretchDIBits(
+                hdc, 
+                x, 
+                y, 
+                width, 
+                height, 
+                0, 
+                0, 
+                CHIP8_SCREEN_WIDTH, 
+                CHIP8_SCREEN_HEIGHT, 
+                chip8Screen.pixels, 
+                &chip8Screen.bitmapInfo,
+                DIB_RGB_COLORS,
+                SRCCOPY
+            );
 
             EndPaint(hwnd, &ps);
             return 0;
