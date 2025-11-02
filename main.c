@@ -5,6 +5,10 @@
 LRESULT CALLBACK windowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 typedef struct {
+    BOOL isKeyDown[16];
+} KeyInfo;
+
+typedef struct {
     UINT8*  MEM;        // Memory
     UINT16  I;          // Address Register
     UINT8   REG[16];    // General Purpose Registers
@@ -13,8 +17,6 @@ typedef struct {
     UINT16  STIMER;     // Sound Timer
     UINT16  STACK[8];   // PC Stack
     UINT8   SP;         // Stack Pointer
-
-
 } Chip8State;
 
 typedef struct {
@@ -24,7 +26,7 @@ typedef struct {
 
 } Framebuffer;
 
-Framebuffer chip8Screen = {
+Framebuffer chipScreen = {
     .pixels = NULL,
     .bitmapInfo = {
         .bmiHeader = {
@@ -39,7 +41,33 @@ Framebuffer chip8Screen = {
     .hBitmap = NULL
 };
 
+KeyInfo keyInfo = { 0 };
+
+UINT8 mapKeyCode(WPARAM virtualKeyCode) {
+    switch (virtualKeyCode) {
+        case 0x31: return 0;  // ('1') -> 0
+        case 0x32: return 1;  // ('2') -> 1
+        case 0x33: return 2;  // ('3') -> 2
+        case 0x34: return 3;  // ('4') -> 3
+        case 0x51: return 4;  // ('Q') -> 4
+        case 0x57: return 5;  // ('W') -> 5
+        case 0x45: return 6;  // ('E') -> 6
+        case 0x52: return 7;  // ('R') -> 7
+        case 0x41: return 8;  // ('A') -> 8
+        case 0x53: return 9;  // ('S') -> 9
+        case 0x44: return 11; // ('D') -> 10
+        case 0x46: return 12; // ('F') -> 11
+        case 0x5A: return 13; // ('Z') -> 12
+        case 0x58: return 14; // ('X') -> 13
+        case 0x43: return 15; // ('C') -> 14
+        case 0x56: return 16; // ('V') -> 15
+    }
+
+    return 0xFF;
+}
+
 void updateState(Chip8State* chipState) {
+
 }
 
 void gameLoop(HWND hwnd) {
@@ -71,9 +99,11 @@ void gameLoop(HWND hwnd) {
         updateState(&chipState);
 
         // Update Screen
-        for (int i = 0; i < CHIP8_SCREEN_HEIGHT * CHIP8_SCREEN_WIDTH * 4; i++) {
-            chip8Screen.pixels[(j * 17) % (CHIP8_SCREEN_HEIGHT * CHIP8_SCREEN_WIDTH * 4)] = j % 0xFF;
-            j++;
+        for (int i = 0; i < 64; i += 4) {
+            chipScreen.pixels[i] = keyInfo.isKeyDown[i / 4] * 0xFF;
+            chipScreen.pixels[i + 1] = keyInfo.isKeyDown[i / 4] * 0xFF;
+            chipScreen.pixels[i + 2] = keyInfo.isKeyDown[i / 4] * 0xFF;
+            chipScreen.pixels[i + 3] = 0xFF;
         }
 
         InvalidateRect(hwnd, NULL, FALSE);
@@ -83,11 +113,60 @@ void gameLoop(HWND hwnd) {
     free(chipState.MEM);
 }
 
+LRESULT CALLBACK windowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    switch (uMsg) {
+        case WM_KEYDOWN: {
+            UINT8 keyCode = mapKeyCode(wParam);
+            if (keyCode == 0xFF) return;
+            keyInfo.isKeyDown[keyCode] = TRUE;
+            return 0;
+        }
+        case WM_KEYUP: {
+            UINT8 keyCode = mapKeyCode(wParam);
+            if (keyCode == 0xFF) return;
+            keyInfo.isKeyDown[keyCode] = FALSE;
+            return 0;
+        }
+        case WM_DESTROY: {
+            PostQuitMessage(0);
+            return 0;
+        }
+        case WM_PAINT: {
+            PAINTSTRUCT ps;
+            HDC hdc = BeginPaint(hwnd, &ps);
+
+            RECT clientRect;
+            GetClientRect(hwnd, &clientRect);
+
+            StretchDIBits(
+                hdc, 
+                0, 
+                0, 
+                clientRect.right - clientRect.left, 
+                clientRect.bottom - clientRect.top, 
+                0, 
+                0, 
+                CHIP8_SCREEN_WIDTH, 
+                CHIP8_SCREEN_HEIGHT, 
+                chipScreen.pixels, 
+                &chipScreen.bitmapInfo,
+                DIB_RGB_COLORS,
+                SRCCOPY
+            );
+
+            EndPaint(hwnd, &ps);
+            return 0;
+        }
+    }
+
+    return DefWindowProc(hwnd, uMsg, wParam, lParam);
+}
+
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow) {
     // Register the window class.
     const wchar_t CLASS_NAME[] = L"CHIP8-EMULATOR";
 
-    WNDCLASS wc = {0};
+    WNDCLASS wc = { 0 };
 
     wc.lpfnWndProc = windowProc;
     wc.hInstance = hInstance;
@@ -114,51 +193,15 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 
     HDC hdc = GetDC(hwnd);
 
-    chip8Screen.hBitmap = CreateDIBSection(hdc, &chip8Screen.bitmapInfo, DIB_RGB_COLORS, &chip8Screen.pixels, NULL, 0);
-    if (chip8Screen.hBitmap == NULL) {
+    chipScreen.hBitmap = CreateDIBSection(hdc, &chipScreen.bitmapInfo, DIB_RGB_COLORS, &chipScreen.pixels, NULL, 0);
+    if (chipScreen.hBitmap == NULL) {
+        ReleaseDC(hwnd, hdc);
         return -1;
     }
     gameLoop(hwnd);
 
     ReleaseDC(hwnd, hdc);
-    DeleteObject(chip8Screen.hBitmap);
+    DeleteObject(chipScreen.hBitmap);
 
     return 0;
-}
-
-LRESULT CALLBACK windowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-    switch (uMsg) {   
-        case WM_DESTROY: {
-            PostQuitMessage(0);
-            return 0;
-        }
-        case WM_PAINT: {
-            PAINTSTRUCT ps;
-            HDC hdc = BeginPaint(hwnd, &ps);
-
-            RECT clientRect;
-            GetClientRect(hwnd, &clientRect);
-
-            StretchDIBits(
-                hdc, 
-                0, 
-                0, 
-                clientRect.right - clientRect.left, 
-                clientRect.bottom - clientRect.top, 
-                0, 
-                0, 
-                CHIP8_SCREEN_WIDTH, 
-                CHIP8_SCREEN_HEIGHT, 
-                chip8Screen.pixels, 
-                &chip8Screen.bitmapInfo,
-                DIB_RGB_COLORS,
-                SRCCOPY
-            );
-
-            EndPaint(hwnd, &ps);
-            return 0;
-        }
-    }
-
-    return DefWindowProc(hwnd, uMsg, wParam, lParam);
 }
