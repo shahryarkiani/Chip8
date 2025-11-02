@@ -18,33 +18,31 @@ typedef struct {
 } Chip8State;
 
 typedef struct {
-    int width;
-    int height;
     UINT8* pixels;
     BITMAPINFO bitmapInfo;
+    HBITMAP hBitmap;
 
 } Framebuffer;
 
 Framebuffer chip8Screen = {
-    .width = 0,
-    .height = 0,
     .pixels = NULL,
     .bitmapInfo = {
         .bmiHeader = {
             .biSize = sizeof(BITMAPINFOHEADER),
             .biWidth = CHIP8_SCREEN_WIDTH,
-            .biHeight = CHIP8_SCREEN_HEIGHT,
+            .biHeight = -CHIP8_SCREEN_HEIGHT,
             .biPlanes = 1,
             .biBitCount = 32,
             .biCompression = BI_RGB
         }
-    }
+    },
+    .hBitmap = NULL
 };
 
 void updateState(Chip8State* chipState) {
 }
 
-void gameLoop() {
+void gameLoop(HWND hwnd) {
     Chip8State chipState = {
         .MEM = malloc(4096),
         .I = 0,
@@ -56,6 +54,7 @@ void gameLoop() {
         .SP = 0
     };
 
+    int j = 0;
     for (;;) {        
         // Process Events
         MSG msg = { 0 };
@@ -67,7 +66,9 @@ void gameLoop() {
         updateState(&chipState);
 
         // Update Screen
-        chip8Screen.pixels[1] = 0xFF;
+        chip8Screen.pixels[(j * 17) % (CHIP8_SCREEN_HEIGHT * CHIP8_SCREEN_WIDTH * 4)] = j % 0xFF;
+        j++;
+        InvalidateRect(hwnd, NULL, FALSE);
     }
 
     free(chipState.MEM);
@@ -104,9 +105,14 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 
     HDC hdc = GetDC(hwnd);
 
-    HBITMAP hBitmap = CreateDIBSection(hdc, &chip8Screen.bitmapInfo, DIB_RGB_COLORS, &chip8Screen.pixels, NULL, 0);
+    chip8Screen.hBitmap = CreateDIBSection(hdc, &chip8Screen.bitmapInfo, DIB_RGB_COLORS, &chip8Screen.pixels, NULL, 0);
+    if (chip8Screen.hBitmap == NULL) {
+        return -1;
+    }
+    gameLoop(hwnd);
 
-    gameLoop();
+    ReleaseDC(hwnd, hdc);
+    DeleteObject(chip8Screen.hBitmap);
 
     return 0;
 }
@@ -125,8 +131,6 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             int y = ps.rcPaint.top;
             int width = ps.rcPaint.right - ps.rcPaint.left;
             int height = ps.rcPaint.bottom - ps.rcPaint.top;
-
-            FillRect(hdc, &ps.rcPaint, (HBRUSH)(COLOR_WINDOW + 1));
 
             StretchDIBits(
                 hdc, 
