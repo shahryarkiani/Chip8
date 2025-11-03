@@ -66,8 +66,143 @@ UINT8 mapKeyCode(WPARAM virtualKeyCode) {
     return 0xFF;
 }
 
-void updateState(Chip8State* chipState) {
+int updateState(Chip8State* chipState) {
+    UINT16 instr = (chipState->MEM[chipState->PC] << 8) | (chipState->MEM[chipState->PC + 1]);
+    UINT8 opcode = instr >> 12 & 0xF;
+    UINT8 reg1 = (instr >> 8) & 0xF;
+    UINT8 reg2 = (instr >> 4) & 0xF;
+    UINT16 lower12 = instr & 0xFFF;
+    UINT8 lower8 = instr & 0xFF;
+    UINT8 lower4 = instr & 0xF;
 
+    BOOL updatePC = TRUE;
+    switch (opcode) {
+        case 0: {
+            if (reg1 != 0) return -1; // Unimplemented
+                
+            if (lower8 == 0xE0) { // Clear Screen
+                memset(chipScreen.pixels, 0, CHIP8_SCREEN_HEIGHT * CHIP8_SCREEN_WIDTH * 4);
+            }
+            else if (lower8 == 0xEE) { // Return from subroutine call
+                --chipState->SP;
+                chipState->PC = chipState->STACK[chipState->SP];
+            }
+        } break;
+        case 1: {
+            updatePC = FALSE;
+            chipState->PC = lower12;
+        } break;
+        case 2: {
+            updatePC = FALSE;
+            chipState->STACK[chipState->SP] = chipState->PC;
+            ++chipState->SP;
+            chipState->PC = lower12;
+        } break;
+        case 3: {
+            UINT8 val = chipState->REG[reg1];
+            if (val == lower8) chipState->PC += 2;
+        } break;
+        case 4: {
+            UINT8 val = chipState->REG[reg1];
+            if (val != lower8) chipState->PC += 2;
+        } break;
+        case 5: {
+            UINT8 val1 = chipState->REG[reg1];
+            UINT8 val2 = chipState->REG[reg2];
+            if (val1 == val2) chipState->PC += 2;
+        } break;
+        case 6: {
+            chipState->REG[reg1] = lower8;
+        } break;
+        case 7: {
+            chipState->REG[reg1] += lower8;
+        } break;
+        case 8: {
+            switch (lower4) {
+                case 0: {
+                    chipState->REG[reg1] = chipState->REG[reg2];
+                } break;
+                case 1: {
+                    chipState->REG[reg1] |= chipState->REG[reg2];
+                } break;
+                case 2: {
+                    chipState->REG[reg1] &= chipState->REG[reg2];
+                } break;
+                case 3: {
+                    chipState->REG[reg1] ^= chipState->REG[reg2];
+                } break;
+                case 4: {
+                    UINT8 prev = chipState->REG[reg1];
+                    chipState->REG[reg1] += chipState->REG[reg2];
+                    if (prev > chipState->REG[reg1]) chipState->REG[0xF] = 1;
+                    else chipState->REG[0xF] = 0;
+                } break;
+                case 5: {
+                    if (chipState->REG[reg1] > chipState->REG[reg2]) chipState->REG[0xF] = 1;
+                    else chipState->REG[0xF] = 0;
+                    chipState->REG[reg1] -= chipState->REG[reg2];
+                } break;
+                case 6: {
+                    UINT8 lsb = chipState->REG[reg2] & 1;
+                    chipState->REG[reg1] = chipState->REG[reg2] >> 1;
+                    chipState->REG[0xF] = lsb;
+                } break;
+                case 7: {
+                    if (chipState->REG[reg2] > chipState->REG[reg1]) chipState->REG[0xF] = 1;
+                    else chipState->REG[0xF] = 0;
+                    chipState->REG[reg1] = chipState->REG[reg2] - chipState->REG[reg1];
+                } break;
+                case 0xE: {
+                    UINT8 msb = (chipState->REG[reg2] >> 7) & 1;
+                    chipState->REG[reg1] = chipState->REG[reg2] << 1;
+                    chipState->REG[0xF] = msb;
+                } break;
+            }
+        } break;
+        case 9: {
+            UINT8 val1 = chipState->REG[reg1];
+            UINT8 val2 = chipState->REG[reg2];
+            if (val1 != val2) chipState->PC += 2;
+        } break;
+        case 0xA: {
+            chipState->I = lower12;
+        } break;
+        case 0xB: {
+            updatePC = FALSE;
+            chipState->PC = chipState->REG[0] + lower12;
+        } break;
+        case 0xC: { // TODO: make this more random
+            chipState->REG[reg1] = 0xAB;
+        } break;
+        case 0xD: {
+            int x = chipState->REG[reg1];
+            int y = chipState->REG[reg2];
+            int n = lower4;
+            for (int ypos = y; ypos < y + n; ypos++) {
+                // TODO   
+            }
+        } break;
+        case 0xE: {
+            BOOL keyPressed = keyInfo.isKeyDown[chipState->REG[reg1]];
+            if (lower8 == 0x9E && keyPressed) {
+                chipState->PC += 2;
+            }
+            else if (lower8 == 0xA1 && !keyPressed) {
+                chipState->PC += 2;
+            }
+        } break;
+        case 0xF: { // TODO
+            switch (lower8) {
+                case 0x7: {
+
+                } break;
+            }
+        } break;
+    }
+
+    if (updatePC) chipState->PC += 2;
+
+    return 0;
 }
 
 void gameLoop(HWND hwnd) {
@@ -107,7 +242,7 @@ void gameLoop(HWND hwnd) {
         }
 
         InvalidateRect(hwnd, NULL, FALSE);
-        Sleep(15);
+        Sleep(16);
     }
 
     free(chipState.MEM);
@@ -117,7 +252,7 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     switch (uMsg) {
         case WM_KEYDOWN: {
             UINT8 keyCode = mapKeyCode(wParam);
-            if (keyCode == 0xFF) return;
+            if (keyCode == 0xFF) return 0;
             keyInfo.isKeyDown[keyCode] = TRUE;
             return 0;
         }
