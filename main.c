@@ -38,8 +38,8 @@ typedef struct {
     UINT16  I;          // Address Register
     UINT8   REG[16];    // General Purpose Registers
     UINT16  PC;         // Program Counter
-    UINT8  DTIMER;      // Delay Timer
-    UINT8  STIMER;      // Sound Timer
+    UINT8   DTIMER;      // Delay Timer
+    UINT8   STIMER;      // Sound Timer
     UINT16  STACK[8];   // PC Stack
     UINT8   SP;         // Stack Pointer
 } Chip8State;
@@ -301,7 +301,7 @@ int updateState(Chip8State* chipState) {
 
 void loadProgram(Chip8State* chipState, HWND hwnd) {
     HANDLE hFile = CreateFileA(
-        "airplane.ch8",
+        "test.ch8",
         GENERIC_READ,
         FILE_SHARE_READ,
         NULL,
