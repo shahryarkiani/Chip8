@@ -19,4 +19,8 @@
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <None Include="test.ch8" />
+    <None Include="test_opcode.ch8" />
+  </ItemGroup>
 </Project>
