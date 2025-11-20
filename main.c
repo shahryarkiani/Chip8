@@ -38,8 +38,8 @@ typedef struct {
     UINT16  I;          // Address Register
     UINT8   REG[16];    // General Purpose Registers
     UINT16  PC;         // Program Counter
-    UINT8   DTIMER;      // Delay Timer
-    UINT8   STIMER;      // Sound Timer
+    UINT8   DTIMER;     // Delay Timer
+    UINT8   STIMER;     // Sound Timer
     UINT16  STACK[8];   // PC Stack
     UINT8   SP;         // Stack Pointer
 } Chip8State;
@@ -95,9 +95,21 @@ UINT8 mapKeyCode(WPARAM virtualKeyCode) {
     return 0xFF;
 }
 
+void startSound() {
+    // Run this tone on loop
+    PlaySound(TEXT("250hz.wav"), NULL, SND_FILENAME | SND_ASYNC | SND_LOOP);
+}
+
+void endSound() {
+    // End all playing sounds
+    PlaySound(NULL, 0, 0);
+}
+
 void updateTimers(Chip8State* chipState) {
     if (chipState->DTIMER) --chipState->DTIMER;
+    // Decrement the soundTimer, but if it's already 0, stop any playing sounds
     if (chipState->STIMER) --chipState->STIMER;
+    else endSound();
 }
 
 int updateState(Chip8State* chipState) {
@@ -261,6 +273,7 @@ int updateState(Chip8State* chipState) {
                 } break;
                 case 0x18: {
                     chipState->STIMER = chipState->REG[reg1];
+                    if (chipState->STIMER) startSound();
                 } break;
                 case 0x1E: {
                     chipState->I += chipState->REG[reg1];
@@ -301,7 +314,7 @@ int updateState(Chip8State* chipState) {
 
 void loadProgram(Chip8State* chipState, HWND hwnd) {
     HANDLE hFile = CreateFileA(
-        "test.ch8",
+        "PONG2",
         GENERIC_READ,
         FILE_SHARE_READ,
         NULL,
